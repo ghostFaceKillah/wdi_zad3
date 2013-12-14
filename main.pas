@@ -194,17 +194,19 @@ procedure init_mem_line(const i : integer; var memory : memory_state);
       memory.area[i, k] := 0;
   end;
 
-procedure add_one_to(const c : char ; var memory:memory_state);
+procedure add_one_to(const ref_x, ref_y : integer ; var memory:memory_state);
   var
-    i, k : shortint;
+    k : shortint;
   begin
-    i := a_to_one(c);
-    if memory.area[0, i] = 0 then begin
+    if memory.area[ref_x,ref_y] = 0 then begin
       k := get_free_space(memory);
-      // init_mem_line(k, memory);
+      init_mem_line(k, memory);
       memory.free_list[k] := false;
-      memory.area[0, i] := k;
+      memory.area[ref_x, ref_y] := k;
       memory.area[k, 1] := 1;
+    end else begin
+
+
     end;
   end;
 
