@@ -2,8 +2,9 @@ program MASCHINE;
 
 const
   MEMSIZE = 50; // how long is memory
-  MEMLEN = 15;  // how deep is memory
+  MEMLEN = 16;  // how deep is memory
   CHAR_OFFSET = 48;
+  A_POS = 97;
 
 type
   action_type = (print_mem, print_var, inc_var, null_var,
@@ -16,11 +17,20 @@ type
     sub_list : action_list;
     next : action_list;
   end;
-  memory_array = array[0..MEMSIZE, 0..MEMLEN] of shortint;
+  memory_state = record
+    area : array[0..MEMSIZE, 1..MEMLEN] of shortint;
+    free_list : array [1..MEMSIZE] of boolean;
+    first_free : shortint;
+  end;
 
 function char_to_int( c : char ) : integer;
   begin 
     char_to_int := ord(c) - CHAR_OFFSET;
+  end;
+
+function a_to_one( c: char ) : integer;
+  begin
+    a_to_one := ord(c) - A_POS + 1;
   end;
 
 ////////////////////// Parser ///////////////////////
@@ -56,9 +66,9 @@ procedure add_to_list(const to_add:action_list; var list, temp:action_list);
     end;
   end;
 
-function parse() : action_list;
-  function get_next_command(c:char) : action_list;
-    function new_action( const c : char; const what : action_type ) : action_list;
+function get_action_list() : action_list;
+  function get_action(c:char) : action_list;
+    function new_action(const c:char; const what:action_type) : action_list;
       var
         to_add : action_list;
         arg : char;
@@ -67,11 +77,11 @@ function parse() : action_list;
         to_add^.is := what;
         to_add^.next := NIl;
         if ( what = scope ) then
-          to_add^.sub_list := parse();
+          to_add^.sub_list := get_action_list();
         if ( what = iterate) then begin
           to_add^.arg := c;
           read(arg);
-          to_add^.sub_list := get_next_command(arg);
+          to_add^.sub_list := get_action(arg);
         end;
         if ( what = null_var ) or ( what = inc_var )
             or ( what = print_var ) then begin
@@ -86,19 +96,19 @@ function parse() : action_list;
     end;
     begin
       if c = '#' then
-        get_next_command := new_action(c, print_mem);
+        get_action := new_action(c, print_mem);
       if c = '@' then
-        get_next_command := new_action(c, print_var);
+        get_action := new_action(c, print_var);
       if c = '^' then
-        get_next_command := new_action(c, inc_var);
+        get_action := new_action(c, inc_var);
       if c = '\' then
-        get_next_command := new_action(c, null_var);
+        get_action := new_action(c, null_var);
       if (ord(c) >= 97) and (ord(c) <= 112) then // a - p
-        get_next_command := new_action(c, add_vars);
+        get_action := new_action(c, add_vars);
       if c = '(' then
-        get_next_command := new_action(c, scope);
+        get_action := new_action(c, scope);
       if (ord(c) >= 50) and (ord(c) <= 57) then // 2 - 9
-        get_next_command := new_action(c, iterate);
+        get_action := new_action(c, iterate);
     end;
   var
     c : char;
@@ -108,14 +118,93 @@ function parse() : action_list;
     resu := Nil; tmp := Nil;
     read(c);
     if is_command_end(c) then
-      parse := return_terminate()
+      get_action_list := return_terminate()
     else begin
       while not(is_command_end(c)) do begin
-        next_command := get_next_command(c);
+        next_command := get_action(c);
         add_to_list(next_command, resu, tmp);
         read(c);
       end;
-      parse := resu;
+      get_action_list := resu;
+    end;
+  end;
+
+/////////////////////// opeartions  /////////////////////////////
+
+procedure init(var memory:memory_state);
+  var
+    i, j : integer;
+  begin
+    for i := 0 to MEMSIZE do
+      for j := 1 to MEMLEN do 
+        memory.area[i,j] := 0;
+    for i := 1 to MEMSIZE do 
+      memory.free_list[i] := true;
+    memory.first_free := 1;
+  end;
+
+procedure write_num(i : shortint);
+  begin
+    if (i>=0) and (i<10) then
+      write('   ',i);
+    if (i>=10) and (i<100) then
+      write('  ',i);
+    if (i>=100) and (i<1000) then
+      write(' ',i);
+  end;
+
+procedure show_memory_state(const memory:memory_state);
+  var
+    i, j : integer;
+  begin
+    for i := 0 to 9 do begin
+      write(' ',i,':');
+      for j := 1 to MEMLEN do
+        write_num(memory.area[i,j]);
+      writeln();
+    end;
+    for i := 10 to MEMSIZE do begin
+      write(i,':');
+      for j := 1 to MEMLEN do
+        write_num(memory.area[i,j]);
+      writeln();
+    end;
+  end;
+
+function get_free_space(var memory:memory_state) : integer;
+  var
+    k : integer;
+  begin
+    get_free_space := memory.first_free;
+    k := memory.first_free;
+    while (memory.free_list [k] <> true) and (k <= MEMLEN) do 
+      inc(k);
+    if ( k > MEMLEN ) then begin
+      writeln('Memory overflow');
+      get_free_space := MEMSIZE + 1;
+    end else
+      memory.first_free := k;
+  end;
+
+procedure init_mem_line(const i : integer; var memory : memory_state);
+  var
+    k : integer;
+  begin
+    for k := 1 to MEMLEN do 
+      memory.area[i, k] := 0;
+  end;
+
+procedure add_one_to(const c : char ; var memory:memory_state);
+  var
+    i, k : shortint;
+  begin
+    i := a_to_one(c);
+    if memory.area[0, i] = 0 then begin
+      k := get_free_space(memory);
+      // init_mem_line(k, memory);
+      memory.free_list[k] := false;
+      memory.area[0, i] := k;
+      memory.area[k, 1] := 1;
     end;
   end;
 
@@ -138,8 +227,12 @@ procedure DBG_print_list( a:action_list);
 
 var
   to_do : action_list;
+  memory : memory_state;
 
 begin
-  to_do := parse();
+  init(memory);
+  // add_one_to('a', memory);
+  // show_memory_state(memory);
+  to_do := get_action_list();
   DBG_print_list(to_do);
 end.
