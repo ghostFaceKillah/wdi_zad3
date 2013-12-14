@@ -17,8 +17,11 @@ type
     next : action_list;
   end;
   memory_array = array[0..MEMSIZE, 0..MEMLEN] of shortint;
-  // run
-  // eval(thing)
+
+function char_to_int( c : char ) : integer;
+  begin 
+    char_to_int := ord(c) - CHAR_OFFSET;
+  end;
 
 ////////////////////// Parser ///////////////////////
 
@@ -49,70 +52,38 @@ procedure add_to_list(const to_add:action_list; var list, temp:action_list);
       temp := to_add;
     end else begin
       temp^.next := to_add;
-      while temp^.next <> Nil do
-        temp := temp^.next;
+      temp := temp^.next;
     end;
   end;
-
-
-//////////////////////// Debugging && testing code /////////////////////
-procedure DBG_print_list( a:action_list);
-begin while a <> NIl do begin writeln(a^.is); a := a^.next; end; end;
-
-   //  action_type = (print_mem, print_var, inc_var, null_var,
-   //               add_vars, scope, iterate, terminate);
-   //  is : action_type;
-   //  arg : char;
-   //  sec_arg : char;
-   //  sub_list : action_list;
-   //  next : action_list;
-
 
 function parse() : action_list;
   function get_next_command(c:char) : action_list;
     function new_action( const c : char; const what : action_type ) : action_list;
       var
-        to_add, sub, temp : action_list;
-        j, k : integer;
+        to_add : action_list;
         arg : char;
       begin
+        new(to_add);
+        to_add^.is := what;
+        to_add^.next := NIl;
         if ( what = scope ) then
-          to_add := parse()
-        else if ( what = iterate ) then begin
-          to_add := Nil;
-          temp := Nil;
-          k := ord(c) - CHAR_OFFSET;
+          to_add^.sub_list := parse();
+        if ( what = iterate) then begin
+          to_add^.arg := c;
           read(arg);
-          // DBG
-          // writeln('do it for this many times: ', k);
-          // writeln('do this :', arg);
-          // have to make enough copies
-          // writeln('now write what you got');
-          // DBG_print_list(sub);
-
-          for j := 1 to k do begin
-            sub := get_next_command(arg);
-           //  writeln('adding what i got to the list');
-             add_to_list(sub, to_add, temp);
-          //   writeln('showing what i got');
-           //  DBG_print_list(to_add);
-          end;
-        end else begin
-          new(to_add);
-          to_add^.is := what;
-          to_add^.next := NIl;
-          if ( what = null_var ) or ( what = inc_var )
-              or ( what = print_var ) then begin
-            read(arg);
-            to_add^.arg := arg;
-          end;
-          if ( what = add_vars ) then begin
-            read(arg);
-            to_add^.sec_arg := arg;
-          end;
+          to_add^.sub_list := get_next_command(arg);
+        end;
+        if ( what = null_var ) or ( what = inc_var )
+            or ( what = print_var ) then begin
+          read(arg);
+          to_add^.arg := arg;
+        end;
+        if ( what = add_vars ) then begin
+          read(arg);
+          to_add^.sec_arg := arg;
         end;
         new_action := to_add;
-      end;
+    end;
     begin
       if c = '#' then
         get_next_command := new_action(c, print_mem);
@@ -148,13 +119,27 @@ function parse() : action_list;
     end;
   end;
 
+//////////////////////// Debugging && testing code /////////////////////
+procedure DBG_print_list( a:action_list);
+  var
+    k : integer;
+  begin
+    while a <> NIl do begin
+      if ( a^.is = iterate ) then
+        for k := 1 to char_to_int(a^.arg) do DBG_print_list( a^.sub_list )
+      else if ( a^.is = scope ) then
+        DBG_print_list( a^.sub_list )
+      else writeln(a^.is);
+      a := a^.next;
+    end;
+  end;
 
 //////////////////////// Main loop ////////////////////////////////////
 
 var
-  resu : action_list;
+  to_do : action_list;
 
 begin
-  resu := parse();
-  DBG_print_list(resu);
+  to_do := parse();
+  DBG_print_list(to_do);
 end.
