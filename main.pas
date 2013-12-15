@@ -18,10 +18,11 @@ type
     next : action_list;
   end;
   memory_state = record
-    area : array[0..MEMSIZE, 1..MEMLEN] of shortint;
+    area : array[0..MEMSIZE, 1..MEMLEN] of integer;
     free_list : array [1..MEMSIZE] of boolean;
-    first_free : shortint;
+    first_free : integer;
   end;
+  area_type = (storage, address);
 
 function char_to_int( c : char ) : integer;
   begin 
@@ -143,7 +144,7 @@ procedure init(var memory:memory_state);
     memory.first_free := 1;
   end;
 
-procedure write_num(i : shortint);
+procedure write_num(i : integer);
   begin
     if (i>=0) and (i<10) then
       write('   ',i);
@@ -194,20 +195,51 @@ procedure init_mem_line(const i : integer; var memory : memory_state);
       memory.area[i, k] := 0;
   end;
 
-procedure add_one_to(const ref_x, ref_y : integer ; var memory:memory_state);
-  var
-    k : shortint;
+function get_field_type(const i, j : integer) : area_type;
   begin
-    if memory.area[ref_x,ref_y] = 0 then begin
-      k := get_free_space(memory);
-      init_mem_line(k, memory);
-      memory.free_list[k] := false;
-      memory.area[ref_x, ref_y] := k;
-      memory.area[k, 1] := 1;
-    end else begin
+    if (i = 0) or (j = MEMLEN) then 
+      get_field_type := address
+    else
+      get_field_type := storage;
+  end;
 
-
+procedure get_next_address( var i, j : integer; var memory:memory_state );
+  var
+    k : integer;
+  begin 
+    if get_field_type(i,j) = storage then
+      inc(j)
+    else begin
+      if memory.area[i,j] = 0 then begin
+        k := get_free_space(memory);
+        init_mem_line(k, memory);
+        memory.free_list[k] := false; // move to init_mem_line
+        memory.area[i,j] := k;
+        i := k;
+        j := 1;
+      end else begin
+        i := memory.area[i,j];
+        j := 1;
+      end;
     end;
+  end;
+
+
+procedure add_one_to( i, j : integer ; var memory:memory_state);
+  begin
+    if get_field_type(i,j) = address then
+      get_next_address(i,j, memory);
+    inc(memory.area[i,j]);
+    if memory.area[i,j] = 1000 then begin
+      memory.area[i,j] := 0;
+      get_next_address(i,j, memory);
+      add_one_to(i,j, memory);
+    end;
+  end;
+
+procedure add_two_vars( x1, x2, y1, y2 : integer; var memory:memory_state);
+  begin
+    while not( get_field_type
   end;
 
 //////////////////////// Debugging && testing code /////////////////////
@@ -230,11 +262,12 @@ procedure DBG_print_list( a:action_list);
 var
   to_do : action_list;
   memory : memory_state;
+  i : longint;
 
 begin
   init(memory);
-  // add_one_to('a', memory);
-  // show_memory_state(memory);
+  add_one_to(0, a_to_one('a'), memory);
+  show_memory_state(memory);
   to_do := get_action_list();
   DBG_print_list(to_do);
 end.
