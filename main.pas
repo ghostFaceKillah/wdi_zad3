@@ -184,10 +184,11 @@ function get_free_space(var memory:memory_state) : integer;
     get_free_space := memory.first_free;
     memory.free_list[memory.first_free] := false;
     k := memory.first_free;
-    while (memory.free_list[k] <> true) and (k <= MEMSIZE) do 
+    while (k <= MEMSIZE) and (memory.free_list[k] <> true) do
       inc(k);
     if ( k > MEMSIZE ) then begin
       writeln('Memory overflow');
+      show_memory_state(memory);
       get_free_space := MEMSIZE + 1;
     end;
     memory.first_free := k;
@@ -214,12 +215,15 @@ function get_field_type(const i, j : integer) : area_type;
   end;
 
 procedure get_next_address( var i, j : integer; var memory:memory_state );
+  var oldi,oldj:integer;
   begin 
     if get_field_type(i,j) = storage then
       inc(j)
     else begin
       if memory.area[i,j] = 0 then begin
+        oldi := i; oldj := j;
         init_mem_line(i,j,memory);
+        memory.area[oldi, oldj] := i;
       end else begin
         i := memory.area[i,j];
         j := 1;
@@ -240,19 +244,19 @@ procedure add_one_to( i, j : integer ; var memory:memory_state);
   end;
 
 procedure add_two_vars( x1, x2, y1, y2 : integer; var memory:memory_state);
-  function the_end():boolean;
+  function add_two_vars_end():boolean;
     begin
-      the_end := (get_field_type(x1,y1) = address) and
+      add_two_vars_end := (get_field_type(x1,y1) = address) and
       (get_field_type(x2,y2) = address) and
       (memory.area[x1,y1] = 0) and
-      (memory.area[x1,y1] = 0);
+      (memory.area[x2,y2] = 0);
     end;
   var
     tempx, tempy : integer;
   begin
     get_next_address(x1,y1, memory);
     get_next_address(x2,y2, memory);
-    while not(the_end()) do begin
+    while not(add_two_vars_end) do begin
       if (get_field_type(x1,y1) = storage) and
       (get_field_type(x2,y2) = storage) then begin
         memory.area[x1,y1] := memory.area[x1,y1] + memory.area[x2,y2];
@@ -265,6 +269,8 @@ procedure add_two_vars( x1, x2, y1, y2 : integer; var memory:memory_state);
       end;
       get_next_address(x1,y1, memory);
       get_next_address(x2,y2, memory);
+      show_memory_state(memory);
+      readln();
     end;
   end;
 
@@ -275,7 +281,7 @@ procedure return_to_free_pool( x,y:integer; var memory : memory_state );
                  (memory.area[x,y] = 0);
     end;
   begin
-    while not(the_end) do begin
+    while not(the_end()) do begin
       if get_field_type(x,y) = address then begin
         memory.free_list[memory.area[x,y]] := true;
         if memory.area[x,y] < memory.first_free then
@@ -283,6 +289,16 @@ procedure return_to_free_pool( x,y:integer; var memory : memory_state );
       end;
       get_next_address(x,y,memory);
     end;
+  end;
+
+procedure write_num_with_zeros( i : integer );
+  begin
+    if (i>=0) and (i<10) then
+      write('00',i);
+    if (i>=10) and (i<100) then
+      write('0',i);
+    if (i>=100) and (i<1000) then
+      write(i);
   end;
 
 procedure write_var( x,y: integer; var memory:memory_state);
@@ -297,38 +313,40 @@ procedure write_var( x,y: integer; var memory:memory_state);
       the_end := (get_field_type(x,y) = address) and
                  (memory.area[x,y] = 0);
     end;
-
   var
     to_write : longnum;
     temp : longnum;
     dropped_zeros : boolean;
 
   begin
-    to_write := nil;
-    // cons
-    while not(the_end()) do begin
-      if get_field_type(x,y) <> address then begin
-        new(temp);
-        temp^.num := memory.area[x,y];
-        temp^.next := to_write;
-        to_write := temp;
-      end;
-      get_next_address(x,y,memory);
-    end;
-    // write
-    dropped_zeros := false;
-    while temp <> Nil do begin
-      if not(dropped_zeros) then begin
-        if temp^.num <> 0 then begin
-          dropped_zeros := true;
-          write(temp^.num);
+    if memory.area[x,y] = 0 then writeln('0')
+    else begin
+      to_write := nil;
+      while not(the_end()) do begin
+        if get_field_type(x,y) = storage then begin
+          new(temp);
+          temp^.num := memory.area[x,y];
+          temp^.next := to_write;
+          to_write := temp;
         end;
-      end else begin
-        write(temp^.num);
+        get_next_address(x,y,memory);
       end;
-      temp := temp^.next;
+      // write
+      dropped_zeros := false;
+      temp := to_write;   /// WHYYYYYYY ?????
+      while temp <> Nil do begin
+        if not(dropped_zeros) then begin
+          if temp^.num <> 0 then begin
+            dropped_zeros := true;
+            write(temp^.num);
+          end;
+        end else begin
+          write_num_with_zeros(temp^.num);
+        end;
+        temp := temp^.next;
+      end;
+      writeln();
     end;
-    writeln();
   end;
 
 procedure null_this_var( x, y : integer; var memory : memory_state );
