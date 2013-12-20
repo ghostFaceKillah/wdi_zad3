@@ -2,3 +2,4 @@ runme
 *.o
 .*.swp
 .*.swo
+*~

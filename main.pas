@@ -243,6 +243,30 @@ procedure add_one_to( i, j : integer ; var memory:memory_state);
     end;
   end;
 
+procedure cleaner(x,y : integer; var memory:memory_state);
+  function cleanup_end():boolean;
+    begin
+      cleanup_end := (get_field_type(x,y) = address) and
+      (get_field_type(x,y) = address) and
+      (memory.area[x,y] = 0) and
+      (memory.area[x,y] = 0);
+    end;
+  var
+    tempx, tempy : integer;
+  begin
+    get_next_address(x,y, memory);
+    while not(cleanup_end) do begin
+      if memory.area[x,y] >= 1000 then begin
+        tempx := x; tempy := y;
+        get_next_address(tempx, tempy, memory);
+        add_one_to(tempx, tempy, memory);
+        memory.area[x,y] := memory.area[x,y] - 1000;
+      end;
+    get_next_address(x,y, memory);
+    end;
+  end;
+
+
 procedure add_two_vars( x1, x2, y1, y2 : integer; var memory:memory_state);
   function add_two_vars_end():boolean;
     begin
@@ -251,26 +275,15 @@ procedure add_two_vars( x1, x2, y1, y2 : integer; var memory:memory_state);
       (memory.area[x1,y1] = 0) and
       (memory.area[x2,y2] = 0);
     end;
-  var
-    tempx, tempy : integer;
   begin
     get_next_address(x1,y1, memory);
     get_next_address(x2,y2, memory);
     while not(add_two_vars_end) do begin
       if (get_field_type(x1,y1) = storage) and
-      (get_field_type(x2,y2) = storage) then begin
+      (get_field_type(x2,y2) = storage) then
         memory.area[x1,y1] := memory.area[x1,y1] + memory.area[x2,y2];
-        if memory.area[x1,y1] >= 1000 then begin
-          tempx := x1; tempy := y1;
-          get_next_address(tempx, tempy, memory);
-          add_one_to(tempx, tempy, memory);
-          memory.area[x1,y1] := memory.area[x1,y1] - 1000;
-        end;
-      end;
       get_next_address(x1,y1, memory);
       get_next_address(x2,y2, memory);
-      show_memory_state(memory);
-      readln();
     end;
   end;
 
@@ -367,8 +380,11 @@ procedure eval( a : action_list; var memory:memory_state );
         print_var : write_var(0, a_to_one(a^.arg), memory);
         inc_var : add_one_to( 0, a_to_one(a^.arg), memory);
         null_var : null_this_var(0, a_to_one(a^.arg), memory);
-        add_vars : add_two_vars( 0,0, a_to_one(a^.arg),
+        add_vars : begin
+                     add_two_vars( 0,0, a_to_one(a^.arg),
                                  a_to_one(a^.sec_arg), memory);
+                     cleaner(0, a_to_one(a^.arg), memory);
+                   end;
         scope : eval( a^.sub_list, memory);
         iterate : for k := 1 to char_to_int(a^.arg) do
                     eval(a^.sub_list, memory);
@@ -423,6 +439,7 @@ begin
   to_do := get_action_list(input_string, k);
   while to_do^.is <> terminate do begin
     eval(to_do,memory);
+    // DBG_print_list(to_do);
     readln(input_string);
     k := 0;
     to_do := get_action_list(input_string, k);
