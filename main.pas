@@ -1,10 +1,22 @@
 program MASCHINE;
 
+///////////////////////////////////////////////////////////////////////////////////
+// this machine works as follows
+// 
+//   parser(input) = list of actions  --> eval(list of actions, state of machine)  -->
+//                      --> commands(state of machine) --> output
+//
+// parser - it parses inputs from stdin into list of actions to be evaled 
+// commands - are later called by eval to manipulate state of the machine
+// eval - takes list of actions and calls commands to manipulate state of machine 
+//        as requested by user via commands
+
 const
   MEMSIZE = 50; // how long is memory
   MEMLEN = 16;  // how deep is memory
   CHAR_OFFSET = 48;
   A_POS = 97;
+  EOL_CHAR = 'x';  // just a char to serve as eol in this code
 
 type
   action_type = (print_mem, print_var, inc_var, null_var,
@@ -24,32 +36,35 @@ type
   end;
   area_type = (storage, address);
 
-/// Utils
+
+///////////////////// Utils ///////////////////////////////////
 
 function char_to_int( c : char ) : integer;
   begin 
     char_to_int := ord(c) - CHAR_OFFSET;
   end;
 
-function a_to_one( c: char ) : integer;
+function where_stored( c: char ) : integer;
   begin
-    a_to_one := ord(c) - A_POS + 1;
+    where_stored := ord(c) - A_POS + 1;
   end;
 
-function get_next_input_char( var i : integer; const input_string:string) : char;
+function get_next_input_char(var i : integer; const input_string:string) : char;
   begin
     inc(i);
     if i > length(input_string) then
-      get_next_input_char := 'x'
+      get_next_input_char := EOL_CHAR
     else if input_string[i] = ')' then
-        get_next_input_char := 'x'
+        get_next_input_char := EOL_CHAR
       else
         get_next_input_char := input_string[i];
   end;
 
-/// Parser 
+
+/////////////////////// Parsing system ///////////////////////
 
 function return_terminate() : action_list;
+  // returns kill program action
   var
     temp : action_list;
   begin
@@ -60,7 +75,6 @@ function return_terminate() : action_list;
 
 procedure add_to_list(const to_add:action_list; var list, temp:action_list);
   begin
-   //    DBG_REPORT( 'add_to_list', to_add);
     if list = Nil then begin
       list := to_add;
       temp := to_add;
@@ -69,6 +83,21 @@ procedure add_to_list(const to_add:action_list; var list, temp:action_list);
       temp := temp^.next;
     end;
   end;
+
+
+  // paradoxally, function below is triple nested for readability
+  // new_action is a ''constructor'' for type action_list and just wraps arguments
+  // into an action object
+  //
+  // get_action is just enumeration of all possible actions to get from text, which
+  // calls new_action with arguments and returns action object it got from new_action
+  //
+  // get_action_list reads inputs, calls get_action and constructs list of commnads 
+  // returned by it, which is later evaled by eval part of the code
+  // please note, that we need triple nesting in order to enable recursive call of
+  //
+  // get_action_list in new_action - it allows us to use same parsing for commands
+  // in parenthesis
 
 function get_action_list(input_string:string; var read_pos:integer) : action_list;
   function get_action(c:char) : action_list;
@@ -79,7 +108,7 @@ function get_action_list(input_string:string; var read_pos:integer) : action_lis
       begin
         new(to_add);
         to_add^.is := what;
-        to_add^.next := NIl;
+        to_add^.next := nil;
         if ( what = scope ) then begin
           to_add^.sub_list := get_action_list(input_string, read_pos);
         end;
@@ -123,10 +152,10 @@ function get_action_list(input_string:string; var read_pos:integer) : action_lis
   begin
     resu := Nil; tmp := Nil;
     c := get_next_input_char(read_pos, input_string);
-    if c = 'x' then
+    if c = EOL_CHAR then
       get_action_list := return_terminate()
     else begin
-      while not(c = 'x') do begin
+      while not(c = EOL_CHAR) do begin
         next_command := get_action(c);
         add_to_list(next_command, resu, tmp);
         c := get_next_input_char(read_pos, input_string);
@@ -135,7 +164,7 @@ function get_action_list(input_string:string; var read_pos:integer) : action_lis
     end;
   end;
 
-///// opeartions
+/////////////////// opeartions /////////////////////////////
 
 procedure init(var memory:memory_state);
   var
@@ -244,6 +273,7 @@ procedure add_one_to( i, j : integer ; var memory:memory_state);
   end;
 
 procedure cleaner(x,y : integer; var memory:memory_state);
+  // handles overflowed (val > 1000) bytes after adding two vars
   function cleanup_end():boolean;
     begin
       cleanup_end := (get_field_type(x,y) = address) and
@@ -315,6 +345,7 @@ procedure write_num_with_zeros( i : integer );
   end;
 
 procedure write_var( x,y: integer; var memory:memory_state);
+  // uses a small stack to list all bytes of a var to write
   type
     longnum = ^numpart;
     numpart = record
@@ -346,7 +377,7 @@ procedure write_var( x,y: integer; var memory:memory_state);
       end;
       // write
       dropped_zeros := false;
-      temp := to_write;   /// WHYYYYYYY ?????
+      temp := to_write;
       while temp <> Nil do begin
         if not(dropped_zeros) then begin
           if temp^.num <> 0 then begin
@@ -377,13 +408,13 @@ procedure eval( a : action_list; var memory:memory_state );
     while a <> Nil do begin
       case a^.is of
         print_mem : show_memory_state(memory);
-        print_var : write_var(0, a_to_one(a^.arg), memory);
-        inc_var : add_one_to( 0, a_to_one(a^.arg), memory);
-        null_var : null_this_var(0, a_to_one(a^.arg), memory);
+        print_var : write_var(0, where_stored(a^.arg), memory);
+        inc_var : add_one_to( 0, where_stored(a^.arg), memory);
+        null_var : null_this_var(0, where_stored(a^.arg), memory);
         add_vars : begin
-                     add_two_vars( 0,0, a_to_one(a^.arg),
-                                 a_to_one(a^.sec_arg), memory);
-                     cleaner(0, a_to_one(a^.arg), memory);
+                     add_two_vars( 0,0, where_stored(a^.arg),
+                                 where_stored(a^.sec_arg), memory);
+                     cleaner(0, where_stored(a^.arg), memory);
                    end;
         scope : eval( a^.sub_list, memory);
         iterate : for k := 1 to char_to_int(a^.arg) do
@@ -393,36 +424,36 @@ procedure eval( a : action_list; var memory:memory_state );
     end;
   end;
 
+// to write procedure mem_clean
 
-///// Debugging && testing code
-
-procedure DBG_print_list( a:action_list);
-  var
-    k : integer;
-  begin
-    while a <> NIl do begin
-      if ( a^.is = iterate ) then
-        for k := 1 to char_to_int(a^.arg) do DBG_print_list( a^.sub_list )
-      else if ( a^.is = scope ) then
-        DBG_print_list( a^.sub_list )
-      else if ( a^.is = add_vars ) then
-        writeln( 'add ', a^.arg, ' to ', a^.sec_arg)
-      else writeln(a^.is);
-      a := a^.next;
-    end;
-  end;
-
-procedure DBG_print_malloc(const mem:memory_state);
-  var
-    k : integer;
-  begin
-    writeln();
-    writeln('used memory areas:');
-    for k := 1 to MEMSIZE do 
-      if not(mem.free_list[k]) then
-        write(k,' ');
-    writeln();
-  end;
+///// Debugging && testing code // to delete
+// procedure DBG_print_list( a:action_list);
+//   var
+//     k : integer;
+//   begin
+//     while a <> NIl do begin
+//       if ( a^.is = iterate ) then
+//         for k := 1 to char_to_int(a^.arg) do DBG_print_list( a^.sub_list )
+//       else if ( a^.is = scope ) then
+//         DBG_print_list( a^.sub_list )
+//       else if ( a^.is = add_vars ) then
+//         writeln( 'add ', a^.arg, ' to ', a^.sec_arg)
+//       else writeln(a^.is);
+//       a := a^.next;
+//     end;
+//   end;
+// 
+// procedure DBG_print_malloc(const mem:memory_state);
+//   var
+//     k : integer;
+//   begin
+//     writeln();
+//     writeln('used memory areas:');
+//     for k := 1 to MEMSIZE do 
+//       if not(mem.free_list[k]) then
+//         write(k,' ');
+//     writeln();
+//   end;
 
 ///// Main loop
 
@@ -430,18 +461,17 @@ var
   to_do : action_list;
   memory : memory_state;
   input_string : string;
-  k : integer;
+  read_pos : integer; 
 
 begin
   init(memory);
   readln(input_string);
-  k := 0;
-  to_do := get_action_list(input_string, k);
+  read_pos := 0;
+  to_do := get_action_list(input_string, read_pos);
   while to_do^.is <> terminate do begin
     eval(to_do,memory);
-    // DBG_print_list(to_do);
     readln(input_string);
-    k := 0;
-    to_do := get_action_list(input_string, k);
+    read_pos := 0;
+    to_do := get_action_list(input_string, read_pos);
   end;
 end.
