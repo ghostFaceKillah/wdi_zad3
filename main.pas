@@ -1,22 +1,21 @@
 program MASCHINE;
 
-///////////////////////////////////////////////////////////////////////////////////
-// this machine works as follows
-// 
-//   parser(input) = list of actions  --> eval(list of actions, state of machine)  -->
-//                      --> commands(state of machine) --> output
+// this machine works as follows:
+// initiate(state of machine)
+// parser(input) -> list of actions  --> eval(list of actions, state of memory) 
+//                      in order by using operations(state of memory) --> output
 //
 // parser - it parses inputs from stdin into list of actions to be evaled 
-// commands - are later called by eval to manipulate state of the machine
+// operations - are later called by eval to manipulate state of the machine
 // eval - takes list of actions and calls commands to manipulate state of machine 
 //        as requested by user via commands
 
 const
-  MEMSIZE = 50; // how long is memory
-  MEMLEN = 16;  // how deep is memory
-  CHAR_OFFSET = 48;
-  A_POS = 97;
-  EOL_CHAR = 'x';  // just a char to serve as eol in this code
+  MEMSIZE = 50;     // how long is memory
+  MEMLEN = 16;      // how deep is memory
+  CHAR_OFFSET = 48; // for casting char to int
+  A_POS = 97;      // for getting maping 'a' -> 1; b -> '2' etc
+  EOL_CHAR = 'x';   // just a char to serve as eol in this code
 
 type
   action_type = (print_mem, print_var, inc_var, null_var,
@@ -37,14 +36,15 @@ type
   area_type = (storage, address);
 
 
-///////////////////// Utils ///////////////////////////////////
+/////////////////////////////     Utils     ///////////////////////////////////
 
-function char_to_int( c : char ) : integer;
+function char_to_int(c : char) : integer;
   begin 
     char_to_int := ord(c) - CHAR_OFFSET;
   end;
 
-function where_stored( c: char ) : integer;
+function where_stored(c: char) : integer; 
+// it transforms letters 'a' to 'p' into 1 to 16
   begin
     where_stored := ord(c) - A_POS + 1;
   end;
@@ -61,7 +61,7 @@ function get_next_input_char(var i : integer; const input_string:string) : char;
   end;
 
 
-/////////////////////// Parsing system ///////////////////////
+////////////////////////     Parsing system     ///////////////////////////////
 
 function return_terminate() : action_list;
   // returns kill program action
@@ -85,19 +85,19 @@ procedure add_to_list(const to_add:action_list; var list, temp:action_list);
   end;
 
 
-  // paradoxally, function below is triple nested for readability
-  // new_action is a ''constructor'' for type action_list and just wraps arguments
-  // into an action object
-  //
-  // get_action is just enumeration of all possible actions to get from text, which
-  // calls new_action with arguments and returns action object it got from new_action
-  //
-  // get_action_list reads inputs, calls get_action and constructs list of commnads 
-  // returned by it, which is later evaled by eval part of the code
-  // please note, that we need triple nesting in order to enable recursive call of
-  //
-  // get_action_list in new_action - it allows us to use same parsing for commands
-  // in parenthesis
+// paradoxally, function below is triple nested for readability
+// new_action is a ''constructor'' for type action_list and just wraps arguments
+// into an ''action'' that is added to the list to be later evaled
+//
+// get_action is enumeration of all possible actions to get from text, which calls
+// new_action with right arguments and returns action object it got from new_action
+//
+// get_action_list reads inputs, calls get_action and constructs list of commnads 
+// returned by it, which is later evaled by eval part of the code
+// please note, that we need triple nesting in order to enable recursive call of
+//
+// get_action_list in new_action - it allows us to use same parsing for commands
+// in parenthesis
 
 function get_action_list(input_string:string; var read_pos:integer) : action_list;
   function get_action(c:char) : action_list;
@@ -109,20 +109,20 @@ function get_action_list(input_string:string; var read_pos:integer) : action_lis
         new(to_add);
         to_add^.is := what;
         to_add^.next := nil;
-        if ( what = scope ) then begin
+        if (what = scope) then begin
           to_add^.sub_list := get_action_list(input_string, read_pos);
         end;
-        if ( what = iterate) then begin
+        if (what = iterate) then begin
           to_add^.arg := c;
           arg := get_next_input_char(read_pos, input_string);
           to_add^.sub_list := get_action(arg);
         end;
-        if ( what = null_var ) or ( what = inc_var )
-            or ( what = print_var ) then begin
+        if (what = null_var) or (what = inc_var) or (what = print_var)
+           then begin
           arg := get_next_input_char(read_pos, input_string);
           to_add^.arg := arg;
         end;
-        if ( what = add_vars ) then begin
+        if (what = add_vars) then begin
           to_add^.arg := c;
           arg := get_next_input_char(read_pos, input_string);
           to_add^.sec_arg := arg;
@@ -164,7 +164,7 @@ function get_action_list(input_string:string; var read_pos:integer) : action_lis
     end;
   end;
 
-/////////////////// opeartions /////////////////////////////
+//////////////////////  Operations on memory state  ///////////////////////////
 
 procedure init(var memory:memory_state);
   var
@@ -188,7 +188,7 @@ procedure write_num(i : integer);
       write(' ',i);
   end;
 
-procedure show_memory_state(const memory:memory_state);
+procedure show_memory_state(const memory : memory_state);
   var
     i, j : integer;
   begin
@@ -206,7 +206,7 @@ procedure show_memory_state(const memory:memory_state);
     end;
   end;
 
-function get_free_space(var memory:memory_state) : integer;
+function get_free_space(var memory : memory_state) : integer;
   var
     k : integer;
   begin
@@ -216,6 +216,7 @@ function get_free_space(var memory:memory_state) : integer;
     while (k <= MEMSIZE) and (memory.free_list[k] <> true) do
       inc(k);
     if ( k > MEMSIZE ) then begin
+      // useful for writing test cases
       writeln('Memory overflow');
       show_memory_state(memory);
       get_free_space := MEMSIZE + 1;
@@ -235,7 +236,7 @@ procedure init_mem_line(var i,j : integer; var memory : memory_state);
     j := 1;
   end;
 
-function get_field_type(const i, j : integer) : area_type;
+function get_field_type(const i,j : integer) : area_type;
   begin
     if (i = 0) or (j = MEMLEN) then 
       get_field_type := address
@@ -243,7 +244,7 @@ function get_field_type(const i, j : integer) : area_type;
       get_field_type := storage;
   end;
 
-procedure get_next_address( var i, j : integer; var memory:memory_state );
+procedure get_next_address(var i,j : integer; var memory : memory_state);
   var oldi,oldj:integer;
   begin 
     if get_field_type(i,j) = storage then
@@ -260,7 +261,7 @@ procedure get_next_address( var i, j : integer; var memory:memory_state );
     end;
   end;
 
-procedure add_one_to( i, j : integer ; var memory:memory_state);
+procedure add_one_to(i,j : integer ; var memory:memory_state);
   begin
     if get_field_type(i,j) = address then
       get_next_address(i,j, memory);
@@ -272,20 +273,20 @@ procedure add_one_to( i, j : integer ; var memory:memory_state);
     end;
   end;
 
-procedure cleaner(x,y : integer; var memory:memory_state);
+function the_end(x,y : integer; const memory:memory_state) : boolean;
+  begin
+    the_end := (get_field_type(x,y) = address) and
+    (memory.area[x,y] = 0);
+  end;
+
+procedure cleaner(x,y : integer; var memory : memory_state);
   // handles overflowed (val > 1000) bytes after adding two vars
-  function cleanup_end():boolean;
-    begin
-      cleanup_end := (get_field_type(x,y) = address) and
-      (get_field_type(x,y) = address) and
-      (memory.area[x,y] = 0) and
-      (memory.area[x,y] = 0);
-    end;
+  // and makes adding two vars so much easier
   var
     tempx, tempy : integer;
   begin
     get_next_address(x,y, memory);
-    while not(cleanup_end) do begin
+    while not(the_end(x,y,memory)) do begin
       if memory.area[x,y] >= 1000 then begin
         tempx := x; tempy := y;
         get_next_address(tempx, tempy, memory);
@@ -297,18 +298,11 @@ procedure cleaner(x,y : integer; var memory:memory_state);
   end;
 
 
-procedure add_two_vars( x1, x2, y1, y2 : integer; var memory:memory_state);
-  function add_two_vars_end():boolean;
-    begin
-      add_two_vars_end := (get_field_type(x1,y1) = address) and
-      (get_field_type(x2,y2) = address) and
-      (memory.area[x1,y1] = 0) and
-      (memory.area[x2,y2] = 0);
-    end;
+procedure add_two_vars(x1,x2,y1,y2 : integer; var memory:memory_state);
   begin
     get_next_address(x1,y1, memory);
     get_next_address(x2,y2, memory);
-    while not(add_two_vars_end) do begin
+    while not(the_end(x1, y1, memory) and the_end(x2, y2, memory)) do begin
       if (get_field_type(x1,y1) = storage) and
       (get_field_type(x2,y2) = storage) then
         memory.area[x1,y1] := memory.area[x1,y1] + memory.area[x2,y2];
@@ -317,14 +311,9 @@ procedure add_two_vars( x1, x2, y1, y2 : integer; var memory:memory_state);
     end;
   end;
 
-procedure return_to_free_pool( x,y:integer; var memory : memory_state );
-  function the_end():boolean;
-    begin
-      the_end := (get_field_type(x,y) = address) and
-                 (memory.area[x,y] = 0);
-    end;
+procedure return_to_free_pool(x,y:integer; var memory : memory_state);
   begin
-    while not(the_end()) do begin
+    while not(the_end(x, y, memory)) do begin
       if get_field_type(x,y) = address then begin
         memory.free_list[memory.area[x,y]] := true;
         if memory.area[x,y] < memory.first_free then
@@ -334,7 +323,7 @@ procedure return_to_free_pool( x,y:integer; var memory : memory_state );
     end;
   end;
 
-procedure write_num_with_zeros( i : integer );
+procedure write_num_with_zeros(i : integer);
   begin
     if (i>=0) and (i<10) then
       write('00',i);
@@ -344,7 +333,7 @@ procedure write_num_with_zeros( i : integer );
       write(i);
   end;
 
-procedure write_var( x,y: integer; var memory:memory_state);
+procedure print_this_var(x,y: integer; var memory:memory_state);
   // uses a small stack to list all bytes of a var to write
   type
     longnum = ^numpart;
@@ -352,21 +341,17 @@ procedure write_var( x,y: integer; var memory:memory_state);
       num : integer;
       next : longnum;
     end;
-  function the_end():boolean;
-    begin
-      the_end := (get_field_type(x,y) = address) and
-                 (memory.area[x,y] = 0);
-    end;
   var
     to_write : longnum;
+    trash : longnum;
     temp : longnum;
     dropped_zeros : boolean;
-
   begin
     if memory.area[x,y] = 0 then writeln('0')
     else begin
+      // build the stack ...
       to_write := nil;
-      while not(the_end()) do begin
+      while not(the_end(x,y,memory)) do begin
         if get_field_type(x,y) = storage then begin
           new(temp);
           temp^.num := memory.area[x,y];
@@ -375,7 +360,7 @@ procedure write_var( x,y: integer; var memory:memory_state);
         end;
         get_next_address(x,y,memory);
       end;
-      // write
+      // ... and write
       dropped_zeros := false;
       temp := to_write;
       while temp <> Nil do begin
@@ -387,75 +372,57 @@ procedure write_var( x,y: integer; var memory:memory_state);
         end else begin
           write_num_with_zeros(temp^.num);
         end;
+        trash := temp;
         temp := temp^.next;
+        dispose(trash);
       end;
       writeln();
     end;
   end;
 
-procedure null_this_var( x, y : integer; var memory : memory_state );
+procedure null_this_var(x,y : integer; var memory : memory_state);
   begin
     return_to_free_pool(x,y, memory);
     memory.area[x,y] := 0;
   end;
 
-///// Eval
+/////////////////////////////     Eval     ////////////////////////////////////
 
-procedure eval( a : action_list; var memory:memory_state );
+procedure eval(a : action_list; var memory:memory_state);
   var
     k : integer;
   begin
     while a <> Nil do begin
       case a^.is of
         print_mem : show_memory_state(memory);
-        print_var : write_var(0, where_stored(a^.arg), memory);
-        inc_var : add_one_to( 0, where_stored(a^.arg), memory);
-        null_var : null_this_var(0, where_stored(a^.arg), memory);
-        add_vars : begin
+        print_var : print_this_var(0, where_stored(a^.arg), memory);
+        inc_var   : add_one_to( 0, where_stored(a^.arg), memory);
+        null_var  : null_this_var(0, where_stored(a^.arg), memory);
+        add_vars  : begin
                      add_two_vars( 0,0, where_stored(a^.arg),
                                  where_stored(a^.sec_arg), memory);
                      cleaner(0, where_stored(a^.arg), memory);
-                   end;
-        scope : eval( a^.sub_list, memory);
-        iterate : for k := 1 to char_to_int(a^.arg) do
-                    eval(a^.sub_list, memory);
+                    end;
+        scope     : eval( a^.sub_list, memory);
+        iterate   : for k := 1 to char_to_int(a^.arg) do
+                      eval(a^.sub_list, memory);
       end;
       a := a^.next;
     end;
   end;
 
-// to write procedure mem_clean
+procedure free_mem(arg : action_list);
+  var
+    trash : action_list;
+  begin
+    while arg<>Nil do begin
+      trash := arg;
+      arg := arg^.next;
+      dispose(trash);
+    end;
+  end;
 
-///// Debugging && testing code // to delete
-// procedure DBG_print_list( a:action_list);
-//   var
-//     k : integer;
-//   begin
-//     while a <> NIl do begin
-//       if ( a^.is = iterate ) then
-//         for k := 1 to char_to_int(a^.arg) do DBG_print_list( a^.sub_list )
-//       else if ( a^.is = scope ) then
-//         DBG_print_list( a^.sub_list )
-//       else if ( a^.is = add_vars ) then
-//         writeln( 'add ', a^.arg, ' to ', a^.sec_arg)
-//       else writeln(a^.is);
-//       a := a^.next;
-//     end;
-//   end;
-// 
-// procedure DBG_print_malloc(const mem:memory_state);
-//   var
-//     k : integer;
-//   begin
-//     writeln();
-//     writeln('used memory areas:');
-//     for k := 1 to MEMSIZE do 
-//       if not(mem.free_list[k]) then
-//         write(k,' ');
-//     writeln();
-//   end;
-
-///// Main loop
+/////////////////////////////  Main loop  /////////////////////////////////////
 
 var
   to_do : action_list;
@@ -470,6 +437,7 @@ begin
   to_do := get_action_list(input_string, read_pos);
   while to_do^.is <> terminate do begin
     eval(to_do,memory);
+    free_mem(to_do);
     readln(input_string);
     read_pos := 0;
     to_do := get_action_list(input_string, read_pos);
