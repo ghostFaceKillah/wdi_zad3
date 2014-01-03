@@ -14,7 +14,7 @@ const
   MEMSIZE = 50;     // how long is memory
   MEMLEN = 16;      // how deep is memory
   CHAR_OFFSET = 48; // for casting char to int
-  A_POS = 97;      // for getting maping 'a' -> 1; b -> '2' etc
+  A_POS = 97;       // for getting maping 'a' -> 1; b -> '2' etc
   EOL_CHAR = 'x';   // just a char to serve as eol in this code
 
 type
@@ -34,7 +34,6 @@ type
     first_free : integer;
   end;
   area_type = (storage, address);
-
 
 /////////////////////////////     Utils     ///////////////////////////////////
 
@@ -60,18 +59,7 @@ function get_next_input_char(var i : integer; const input_string:string) : char;
         get_next_input_char := input_string[i];
   end;
 
-
 ////////////////////////     Parsing system     ///////////////////////////////
-
-function return_terminate() : action_list;
-  // returns kill program action
-  var
-    temp : action_list;
-  begin
-    new(temp);
-    temp^.is := terminate;
-    return_terminate := temp;
-  end;
 
 procedure add_to_list(const to_add:action_list; var list, temp:action_list);
   begin
@@ -83,7 +71,6 @@ procedure add_to_list(const to_add:action_list; var list, temp:action_list);
       temp := temp^.next;
     end;
   end;
-
 
 // paradoxally, function below is triple nested for readability
 // new_action is a ''constructor'' for type action_list and just wraps arguments
@@ -153,7 +140,7 @@ function get_action_list(input_string:string; var read_pos:integer) : action_lis
     resu := Nil; tmp := Nil;
     c := get_next_input_char(read_pos, input_string);
     if c = EOL_CHAR then
-      get_action_list := return_terminate()
+      get_action_list := Nil  // edited from terminate
     else begin
       while not(c = EOL_CHAR) do begin
         next_command := get_action(c);
@@ -184,7 +171,7 @@ procedure write_num(i : integer);
       write('   ',i);
     if (i>=10) and (i<100) then
       write('  ',i);
-    if (i>=100) and (i<1000) then
+    if (i>=100) then
       write(' ',i);
   end;
 
@@ -210,18 +197,19 @@ function get_free_space(var memory : memory_state) : integer;
   var
     k : integer;
   begin
-    get_free_space := memory.first_free;
-    memory.free_list[memory.first_free] := false;
-    k := memory.first_free;
-    while (k <= MEMSIZE) and (memory.free_list[k] <> true) do
-      inc(k);
-    if ( k > MEMSIZE ) then begin
-      // useful for writing test cases
+    if memory.first_free <= MEMSIZE then begin
+      get_free_space := memory.first_free;
+      memory.free_list[memory.first_free] := false;
+      k := memory.first_free;
+      while (k <= MEMSIZE) and (memory.free_list[k] <> true) do
+        inc(k);
+      memory.first_free := k;
+    end else begin
       writeln('Memory overflow');
+      writeln('Dumping malloc state:');
       show_memory_state(memory);
       get_free_space := MEMSIZE + 1;
     end;
-    memory.first_free := k;
   end;
 
 procedure init_mem_line(var i,j : integer; var memory : memory_state);
@@ -285,29 +273,36 @@ procedure cleaner(x,y : integer; var memory : memory_state);
   var
     tempx, tempy : integer;
   begin
-    get_next_address(x,y, memory);
-    while not(the_end(x,y,memory)) do begin
-      if memory.area[x,y] >= 1000 then begin
-        tempx := x; tempy := y;
-        get_next_address(tempx, tempy, memory);
-        add_one_to(tempx, tempy, memory);
-        memory.area[x,y] := memory.area[x,y] - 1000;
+    if memory.area[x,y] <> 0 then begin
+      get_next_address(x,y, memory);
+      while not(the_end(x,y,memory)) do begin
+        if memory.area[x,y] >= 1000 then begin
+          tempx := x; tempy := y;
+          get_next_address(tempx, tempy, memory);
+          add_one_to(tempx, tempy, memory);
+          memory.area[x,y] := memory.area[x,y] - 1000;
+        end;
+      get_next_address(x,y, memory);
       end;
-    get_next_address(x,y, memory);
     end;
+    // writeln(' Cleaner debugging lines write memory:');
+    // show_memory_state( memory );
+    // writeln();
   end;
 
 
 procedure add_two_vars(x1,x2,y1,y2 : integer; var memory:memory_state);
   begin
-    get_next_address(x1,y1, memory);
-    get_next_address(x2,y2, memory);
-    while not(the_end(x1, y1, memory) and the_end(x2, y2, memory)) do begin
-      if (get_field_type(x1,y1) = storage) and
-      (get_field_type(x2,y2) = storage) then
-        memory.area[x1,y1] := memory.area[x1,y1] + memory.area[x2,y2];
-      get_next_address(x1,y1, memory);
-      get_next_address(x2,y2, memory);
+    if memory.area[x2,y2] <> 0 then begin 
+      repeat
+        begin
+          get_next_address(x1,y1, memory);
+          get_next_address(x2,y2, memory);
+          if (get_field_type(x1,y1) = storage) and
+          (get_field_type(x2,y2) = storage) then
+            memory.area[x1,y1] := memory.area[x1,y1] + memory.area[x2,y2];
+        end
+      until the_end(x2, y2, memory);
     end;
   end;
 
@@ -401,11 +396,13 @@ procedure eval(a : action_list; var memory:memory_state);
         add_vars  : begin
                      add_two_vars( 0,0, where_stored(a^.arg),
                                  where_stored(a^.sec_arg), memory);
+                     // writeln('adding ', a^.sec_arg, ' to ', a^.arg);
                      cleaner(0, where_stored(a^.arg), memory);
                     end;
         scope     : eval( a^.sub_list, memory);
         iterate   : for k := 1 to char_to_int(a^.arg) do
                       eval(a^.sub_list, memory);
+                    else;
       end;
       a := a^.next;
     end;
@@ -422,6 +419,47 @@ procedure free_mem(arg : action_list);
     end;
   end;
 
+////////////////////// Debugging && testing code /////////////////////////////
+
+procedure DBG_print_list( a:action_list);
+  begin
+    while a <> Nil do begin
+      case a^.is of
+        print_mem : writeln('print memory');
+        print_var : writeln('print variable ', a^.arg);
+        inc_var   : writeln('increment variable ', a^.arg);
+        null_var  : writeln ('null variable', a^.arg);
+        add_vars  : writeln('add variable ', a^.arg, ' to ', a^.sec_arg);
+        scope     : begin
+                      writeln('### beginning writing scope '); 
+                      DBG_print_list(a^.sub_list);
+                      writeln('### scope end ');
+                    end;
+        iterate   : begin
+                      writeln();
+                      writeln('%%% iterate scope ', a^.arg, ' times'); 
+                      DBG_print_list(a^.sub_list);
+                      writeln('%%% iterate end ');
+                      writeln();
+                    end;
+      end;
+      a := a^.next;
+    end;
+  end;
+
+procedure DBG_print_malloc(const mem:memory_state);
+  var
+    k : integer;
+  begin
+    writeln();
+    writeln('used memory areas:');
+    for k := 1 to MEMSIZE do 
+      if not(mem.free_list[k]) then
+        write(k,' ');
+    writeln();
+    writeln('The first free is :', mem.first_free);
+  end;
+
 /////////////////////////////  Main loop  /////////////////////////////////////
 
 var
@@ -435,8 +473,9 @@ begin
   readln(input_string);
   read_pos := 0;
   to_do := get_action_list(input_string, read_pos);
-  while to_do^.is <> terminate do begin
+  while to_do <> Nil do begin
     eval(to_do,memory);
+    // DBG_print_list(to_do);
     free_mem(to_do);
     readln(input_string);
     read_pos := 0;
