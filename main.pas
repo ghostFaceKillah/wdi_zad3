@@ -74,8 +74,9 @@ procedure add_to_list(const to_add:action_list; var list, temp:action_list);
 
 // paradoxally, function below is triple nested for readability
 //
-// new_action is a ''constructor'' for type action_list and just wraps arguments
-// into an ''action'' that is added to the list to be later evaled
+// new_action is a ''constructor'' for type action_list. It gets arguments from 
+// get_action and sometimes gets arguments from command line e.x. which var user 
+// wants to null, wrapping all of it into an ''action'' that is added to eval list
 //
 // get_action is enumeration of all possible actions to get from input, which calls
 // new_action with right arguments and returns action object it got from new_action
