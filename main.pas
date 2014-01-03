@@ -217,7 +217,7 @@ function get_free_space(var memory : memory_state) : integer;
   end;
 
 procedure init_mem_line(var i,j : integer; var memory : memory_state);
-\\ initialize a line of memory by nulling it - there can be leftovers 
+// initialize a line of memory by nulling it - there can be leftovers 
   var
     k : integer;
   begin
