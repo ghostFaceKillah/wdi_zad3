@@ -73,18 +73,19 @@ procedure add_to_list(const to_add:action_list; var list, temp:action_list);
   end;
 
 // paradoxally, function below is triple nested for readability
+//
 // new_action is a ''constructor'' for type action_list and just wraps arguments
 // into an ''action'' that is added to the list to be later evaled
 //
-// get_action is enumeration of all possible actions to get from text, which calls
+// get_action is enumeration of all possible actions to get from input, which calls
 // new_action with right arguments and returns action object it got from new_action
 //
 // get_action_list reads inputs, calls get_action and constructs list of commnads 
 // returned by it, which is later evaled by eval part of the code
-// please note, that we need triple nesting in order to enable recursive call of
 //
+// please note, that we need triple nesting in order to enable recursive call of
 // get_action_list in new_action - it allows us to use same parsing for commands
-// in parenthesis
+// in parenthesis (scopes and iterators)
 
 function get_action_list(input_string:string; var read_pos:integer) : action_list;
   function get_action(c:char) : action_list;
@@ -116,6 +117,7 @@ function get_action_list(input_string:string; var read_pos:integer) : action_lis
         end;
         new_action := to_add;
     end;
+
     begin
       if c = '#' then
         get_action := new_action(c, print_mem);
@@ -132,15 +134,17 @@ function get_action_list(input_string:string; var read_pos:integer) : action_lis
       if (ord(c) >= 50) and (ord(c) <= 57) then // 2 - 9
         get_action := new_action(c, iterate);
     end;
+
   var
     c : char;
     resu, tmp : action_list;
     next_command : action_list;
+
   begin
     resu := Nil; tmp := Nil;
     c := get_next_input_char(read_pos, input_string);
     if c = EOL_CHAR then
-      get_action_list := Nil  // edited from terminate
+      get_action_list := Nil     //  terminate scope or whole program
     else begin
       while not(c = EOL_CHAR) do begin
         next_command := get_action(c);
@@ -206,13 +210,14 @@ function get_free_space(var memory : memory_state) : integer;
       memory.first_free := k;
     end else begin
       writeln('Memory overflow');
-      writeln('Dumping malloc state:');
+      writeln('Dumping memory allocation state:');
       show_memory_state(memory);
       get_free_space := MEMSIZE + 1;
     end;
   end;
 
 procedure init_mem_line(var i,j : integer; var memory : memory_state);
+\\ initialize a line of memory by nulling it - there can be leftovers 
   var
     k : integer;
   begin
@@ -233,7 +238,7 @@ function get_field_type(const i,j : integer) : area_type;
   end;
 
 procedure get_next_address(var i,j : integer; var memory : memory_state);
-  var oldi,oldj:integer;
+  var oldi,oldj : integer;
   begin 
     if get_field_type(i,j) = storage then
       inc(j)
@@ -285,11 +290,7 @@ procedure cleaner(x,y : integer; var memory : memory_state);
       get_next_address(x,y, memory);
       end;
     end;
-    // writeln(' Cleaner debugging lines write memory:');
-    // show_memory_state( memory );
-    // writeln();
   end;
-
 
 procedure add_two_vars(x1,x2,y1,y2 : integer; var memory:memory_state);
   begin
@@ -329,7 +330,7 @@ procedure write_num_with_zeros(i : integer);
   end;
 
 procedure print_this_var(x,y: integer; var memory:memory_state);
-  // uses a small stack to list all bytes of a var to write
+  // uses a small stack to list all bytes of a var to print
   type
     longnum = ^numpart;
     numpart = record
@@ -396,7 +397,6 @@ procedure eval(a : action_list; var memory:memory_state);
         add_vars  : begin
                      add_two_vars( 0,0, where_stored(a^.arg),
                                  where_stored(a^.sec_arg), memory);
-                     // writeln('adding ', a^.sec_arg, ' to ', a^.arg);
                      cleaner(0, where_stored(a^.arg), memory);
                     end;
         scope     : eval( a^.sub_list, memory);
@@ -475,7 +475,6 @@ begin
   to_do := get_action_list(input_string, read_pos);
   while to_do <> Nil do begin
     eval(to_do,memory);
-    // DBG_print_list(to_do);
     free_mem(to_do);
     readln(input_string);
     read_pos := 0;
