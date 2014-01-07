@@ -409,11 +409,13 @@ procedure eval(a : action_list; var memory:memory_state);
     end;
   end;
 
-procedure free_mem(arg : action_list);
+procedure free_mem(var arg : action_list);
   var
     trash : action_list;
   begin
     while arg<>Nil do begin
+      if (arg^.is = scope) or (arg^.is = iterate) then 
+        free_mem(arg^.sub_list);
       trash := arg;
       arg := arg^.next;
       dispose(trash);
